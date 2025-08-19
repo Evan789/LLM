@@ -1,0 +1,31 @@
+📌 场景：电影评论情感分类
+使用 BERT 对文本进行分类的简单场景
+
+目标：判断一句电影评论是 积极 (positive) 还是 消极 (negative)。
+我们使用 Hugging Face 的 transformers 库来调用预训练的 BERT 模型。
+
+# 安装依赖（如果未安装）
+# pip install torch transformers
+
+from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import pipeline
+
+# 1. 加载预训练的BERT模型 (情感分类)
+model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+classifier = pipeline("sentiment-analysis", model=model_name)
+
+# 2. 输入一些电影评论
+reviews = [
+    "这部电影真的很棒，我非常喜欢！",
+    "剧情太差了，浪费了两个小时。",
+    "演员的表演一般般，但画面很美。",
+]
+
+# 3. 执行分类
+results = classifier(reviews)
+
+# 4. 打印结果
+for review, result in zip(reviews, results):
+    print(f"评论: {review}")
+    print(f"预测结果: {result['label']}，置信度: {result['score']:.2f}")
+    print("-" * 30)
