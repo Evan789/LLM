@@ -41,69 +41,31 @@ for review, result in zip(reviews, results):
 ------------------------------
 评论: 演员的表演一般般，但画面很美。
 预测结果: 3 stars，置信度: 0.67
-------------------------------
+------------------------------------------------------------------------------
 
-在上面的例子里，label 和 score 是 BERT 分类模型输出的结果，它们的来源是这样的：
+1   从 Hugging Face transformers 库中导入两个主要工具：
+    BertTokenizer：BERT 的分词器，可把文本转成模型能理解的 token（这里没直接用，因为 pipeline 已经帮我们封装好了）。
+    BertForSequenceClassification：带有分类头的 BERT 模型，可以做文本分类任务。
+    pipeline：官方封装好的高级接口，一行代码就能完成推理，非常适合入门和快速实验。
+    
+    label → 来自于训练好的分类任务标签（例如 1~5 星）。
+    
+    score → 来自于 softmax 输出的概率，表示置信度。
 
-🔹 1. BERT 模型输出什么？
+2   这里做了两件事：
+    选择模型：
+    使用了 nlptown/bert-base-multilingual-uncased-sentiment，这是一个在多语言影评数据上训练过的 BERT 模型，可以输出情绪星级（1 星到 5 星）。
+    构建 pipeline：
+    pipeline("sentiment-analysis", model=model_name) 创建了情感分析器。之后只需要输入文本字符串，它就会自动：
+    分词
+    向量化
+    喂给 BERT 模型
+    输出分类结果（标签+置信度）。
 
-BERT 在做分类时，输入的文本会经过：
+3   输入我们的 reviews 列表给 classifier，输出结果列表 results
 
-Tokenizer → 把文本拆成词片段（tokens），转成向量。
-
-BERT Encoder → 输出每个 token 的上下文表示。
-
-[CLS] 向量 → 取句子开头的特殊 token [CLS] 的向量，作为整句话的语义表示。
-
-分类层 (Linear + Softmax) → 把 [CLS] 向量输入到一个线性层，最后用 softmax 得到各类别的概率分布。
-
-🔹 2. label 的来源
-
-模型在训练时用的数据集是带标签的，比如情感分类的数据集里：
-
-1 star → 极度负面
-
-2 stars → 负面
-
-3 stars → 中性
-
-4 stars → 正面
-
-5 stars → 极度正面
-
-训练完之后，模型的输出类别就固定为这些标签。
-所以 label 就是 softmax 概率最高的那个类别名称。
-
-例如：
-
-[1 star, 2 stars, 3 stars, 4 stars, 5 stars]
-
-🔹 3. score 的来源
-
-score 就是 softmax 输出的 概率值（范围 0~1 之间）。
-
-表示模型对这个预测结果的置信度。
-
-举个例子：
-输入 "这部电影真的很棒，我非常喜欢！"
-
-Softmax 输出可能是：
-
-1 star: 0.01
-2 stars: 0.02
-3 stars: 0.03
-4 stars: 0.05
-5 stars: 0.89
-
-
-那么：
-
-label = "5 stars"
-
-score = 0.89
-
-✅ 总结：
-
-label → 来自于训练好的分类任务标签（例如 1~5 星）。
-
-score → 来自于 softmax 输出的概率，表示置信度。
+4   遍历每条评论对应的预测结果，逐条打印：
+    原始评论文本。
+    模型的预测标签（星级）。
+    模型的预测置信度，保留两位小数。
+    分隔线（"-"*30）。
