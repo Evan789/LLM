@@ -44,11 +44,16 @@ vectorizer = TfidfVectorizer(tokenizer=tokenizer)
 X_train_tfidf = vectorizer.fit_transform(X_train)
 X_test_tfidf  = vectorizer.transform(X_test)
 
+训练集：fit_transform → 先“学习”词汇表与 IDF 值，再转换。
+测试集：transform → 不能再学习，只能用训练时的词汇表来转换。
+这样保证：训练集和测试集存在于相同的向量空间，分类器才能正常工作。
+
+X_train_tfidf：训练集每一条文本 → TF-IDF 特征向量 → 得到形状 (n_train_samples, vocab_size) 的稀疏矩阵。
+X_test_tfidf：测试集每一条文本 → 在相同的词汇表下转化 → 得到 (n_test_samples, vocab_size) 的稀疏矩阵。
 -------------------------------------------------------------
 #Step 2 模型训练
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
-import jieba
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 clf = LogisticRegression(max_iter=500)
@@ -67,6 +72,38 @@ print(classification_report(y_test, y_pred))
    macro avg       0.25      0.50      0.33         2
 weighted avg       0.25      0.50      0.33         2
 
+X（特征）：输入的数据，也就是文本转换后的 数值化表示（这里是 TF-IDF 矩阵 X_train_tfidf / X_test_tfidf）。
+y（标签）：监督学习中的 目标变量，比如某个文本对应的类别。
+如果是情感分类任务：y=0 表示负面，y=1 表示正面。
+如果是垃圾邮件分类：y=0 表示正常邮件，y=1 表示垃圾邮件。
+👉 也就是说：
+
+X 提供特征（模型看文本），y 提供答案（模型知道该文本的对错分类）。
+
+
+（1）两类标签的指标
+0 和 1 代表了目标变量的两个分类（比如 0=负面，1=正面）。
+precision（精确率）：预测为该类的样本中，有多少是真的。
+recall（召回率）：该类的真实样本中，有多少被正确预测。
+f1-score： precision 和 recall 的调和平均。
+support：测试集中该类的真实样本数量。
+
+（2）类别 0 的表现
+precision = 0.50 → 预测为 0 的样本里，只有一半真的为 0。
+recall = 1.00 → 所有真实为 0 的样本，都被找到了。
+f1 = 0.67 → 综合表现。
+support = 1 → 测试集中只有 1 个样本是真实的 0。
+
+（3）类别 1 的表现
+precision = 0.00 → 预测为 1 的样本全错了。
+recall = 0.00 → 所有真实为 1 的样本，全没预测出来。
+f1 = 0.00 → 综合表现为零。
+support = 1 → 测试集中只有 1 个样本是真实的 1。
+
+（4）总体指标
+accuracy（准确率）= 0.50 → 总共有 2 个测试样本，预测对了 1 个。
+macro avg（宏平均）→ 对各类 precision/recall/f1 取平均（不考虑样本多少）。
+weighted avg（加权平均）→ 按类别样本数加权平均。
 -----------------------------------------------------------
 
 #Step 3 推理
@@ -75,4 +112,111 @@ new_tfidf = vectorizer.transform(new_texts)   # ✅ 注意这里用 transform()
 preds = clf.predict(new_tfidf)
 print(preds)  # [1 0]
 
+
+
+
+
+------------------------------------------------------------
+
+补充说明：
+好问题 👍 这个地方很多人刚开始学时都会有点疑惑。我们来逐步理解一下：
+
+🔢 X_train_tfidf 和 X_test_tfidf 的本质
+它们都是 稀疏矩阵 (sparse matrix)，通常类型是 scipy.sparse.csr_matrix，里面存放的是 TF-IDF 数值特征。
+
+行 (rows) 对应：每一条文本（训练集或测试集里的一句话、一篇文章等）。
+列 (columns) 对应：词汇表中的每一个词（由训练集 fit 得到）。
+矩阵的值 是 TF-IDF 权重（不是 0 就说明该文本中有这个词，并按 TF-IDF 权重表示）。
+🚀 举例
+假设训练集里有两句话：
+
+TEXT
+X_train = [
+    "这部 电影 真 好看",
+    "这部 电影 很 一般"
+]
+经过 TfidfVectorizer.fit_transform(X_train)，得到的词汇表（feature names）可能是：
+
+TEXT
+['一般', '好看', '很', '电影', '这部', '真']
+那么 X_train_tfidf 就是一个 2×6 的稀疏矩阵：
+
+文本索引	一般	好看	很	电影	这部	真
+句子1 ("这部 电影 真 好看")	0	0.63	0	0.45	0.45	0.63
+句子2 ("这部 电影 很 一般")	0.63	0	0.45	0.45	0.45	0
+（数值只是示意，用的是 TF-IDF 权重）
+
+现在测试集里有一句：
+
+TEXT
+X_test = ["这部 电影 很 差劲"]
+注意训练时没有“差劲”这个词，所以词汇表里没有它。
+用 vectorizer.transform(X_test) 转换时，“差劲”会被忽略。
+X_test_tfidf 就是一个 1×6 的稀疏矩阵：
+文本索引	一般	好看	很	电影	这部	真
+句子1 ("这部 电影 很 差劲")	0	0	0.58	0.58	0.58	0
+✅ 总结
+X_train_tfidf：训练集每一条文本 → TF-IDF 特征向量 → 得到形状 (n_train_samples, vocab_size) 的稀疏矩阵。
+X_test_tfidf：测试集每一条文本 → 在相同的词汇表下转化 → 得到 (n_test_samples, vocab_size) 的稀疏矩阵。
+它们的 列数相同（因为用的是同一个 vectorizer 学出的词汇表），才能进入同一个分类器进行训练和预测。
+要不要我帮你写一个 小代码例子（直接打印 vocab 和矩阵数组），你可以跑一下立刻看到 X_train_tfidf 和 X_test_tfidf 里面具体长啥样？
+
+tokens used: 3296, model: OpenAI API (gpt-5-chat-latest)
+
+在这个例子中，“差劲”会被忽略，是不是意味着测试集应当包含几乎所有的词汇表，包括测试集中可能含有的词汇
+
+你提到的点非常关键 👍，涉及到 训练/测试 vocab 是否需要覆盖的问题。我来详细拆解：
+
+1. 为什么“差劲”会被忽略？
+在 TF-IDF（或 CountVectorizer）中，词汇表是由训练集决定的。
+测试集里如果出现了训练时没见过的词（OOV = Out Of Vocabulary），这些词就会被忽略，因为模型压根就没为它分配过特征列。
+👉 所以 "差劲" 在例子里被忽略。
+2. 那么，是不是测试集也要包含几乎所有的词汇表？
+实际上不需要，也通常做不到。原因如下：
+
+数据集划分：机器学习里我们是先分好训练集和测试集，再 fit。
+如果你在 fit 的时候同时看了测试集，就等于 泄漏测试信息（data leakage），破坏了测试的公正性。
+
+自然语言的开放性：语言太丰富了，再大的训练集也不可能覆盖所有未来测试集可能出现的词。
+总会有 OOV（Out Of Vocabulary）的问题。
+
+这属于正常且预期的现象。
+
+3. 那 OOV 怎么办？
+常见处理方式有几种：
+
+允许忽略
+
+就像现在这样，TF-IDF 直接忽略没见过的新词。即使少了几个词，模型依然能利用其他上下文特征进行分类。
+在大多数文本分类任务里，这样做完全可行。
+引入 OOV token
+
+在深度学习里很常见（如 Word2Vec / BERT），会用一个特殊符号 <UNK> 表示所有没见过的词，避免信息完全丢失。
+但在 scikit-learn 的 TfidfVectorizer 里没有这个机制。
+增大训练语料
+
+多收集点数据，提升词汇覆盖率。
+使用更强的分词/特征方式
+
+比如使用 n-gram（子词特征），“差劲”没见过，但“差”或“劲”可能出现过，模型还能捕捉到部分信息。
+或者用 深度语言模型（BERT 类），它们内置了子词分词（WordPiece/BPE），几乎不会有完全 OOV。
+✅ 总结
+测试集不需要、也不应该保证覆盖训练集的词汇表。
+没见过的词（如“差劲”）会被忽略，这是 正常现象。
+模型依然能利用训练时学到的词汇空间进行分类。
+要改善 OOV 问题，可以扩大训练集、用 n-gram 特征，或者用更强的分词/预训练模型。
+
+--------------------------------------------------------------------------
+为什么表现这么差？
+主要原因是：
+
+测试集太小：只有 2 个样本，结果完全不稳定。
+数据样本分布可能偏差：模型可能学到了单一类别的偏向（class imbalance）。
+词汇表覆盖不足：如果测试集出现很多 OOV 的词，模型就没法正常判断。
+逻辑回归参数未优化：默认参数可能没适应你的数据，max_iter=500 只能解决收敛问题。
+4. 下一步改进建议
+✅ 使用 更大的训练/测试集，保证测试至少几百个样本。
+✅ 尝试 n-gram 特征（如 ngram_range=(1,2)），捕捉更多上下文。
+✅ 在分类器里使用 class_weight='balanced' 应对数据不平衡。
+✅ 尝试其他模型：比如 LinearSVC 或 MultinomialNB，对文本分类常常更好。
 
