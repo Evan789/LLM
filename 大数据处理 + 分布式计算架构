@@ -1,0 +1,118 @@
+✅ 1. Hive （实际上是 Apache Hive）
+可能你是打错了，应该是 Hive（没有 Ok 前缀）。
+Hive 是 构建在 Hadoop 之上的数据仓库工具，本质是一个 SQL-on-Hadoop 框架。
+
+核心作用：
+
+把数据文件（CSV、Parquet、ORC 等）存储在 HDFS（Hadoop Distributed File System）中
+使用 类 SQL（HiveQL） 来操作和分析这些数据
+Hive 会把 SQL 翻译成 MapReduce 或 Spark Job 执行
+特点：
+
+适合 大批量离线分析，而不是实时处理
+学习门槛低（用 SQL 就能上手）
+常见于 数仓层（Data Warehouse Layer）
+指导案例：日志分析
+你有一堆 Web 服务器日志（放在 HDFS 上），想统计每天有多少用户访问。
+
+SQL
+CREATE EXTERNAL TABLE web_logs (
+    ip STRING,
+    time STRING,
+    url STRING,
+    status INT
+)
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+STORED AS TEXTFILE
+LOCATION '/data/logs/';
+
+SELECT COUNT(DISTINCT ip), substr(time, 0, 10) as day
+FROM web_logs
+GROUP BY substr(time, 0, 10);
+👉 Hive 会自动帮你把 SQL 转化成 MapReduce 任务去执行。
+
+----------------------------------------------------------------------------------------------------------
+  
+✅ 2. Apache Spark
+Spark 是一个 分布式数据处理引擎，比 Hadoop MapReduce 更快，因为它采用了 内存计算。
+
+核心作用：
+
+大规模数据的 批处理 + 实时流处理
+提供多种 API（Scala、Java、Python [PySpark]）
+内置库：Spark SQL、Spark MLlib（机器学习）、GraphX（图计算）、Spark Streaming
+特点：
+
+相比 Hive，更适合做 复杂计算、机器学习、迭代计算
+性能比传统 Hadoop MapReduce 提升几十倍
+生态特别完善，和 HDFS、Kafka、Hive、HBase 等无缝集成
+指导案例：ETL + 数据聚合
+场景：你有一个 1TB 的用户点击日志，想快速算出每个页面的访问次数（比 Hive 里的 SQL 更快速，并能做复杂的数据转换）。
+
+PYTHON
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("PageViewCount") \
+    .getOrCreate()
+
+# 读取 CSV 日志
+logs = spark.read.csv("/data/logs.csv", header=True, inferSchema=True)
+
+# 统计每个 URL 的访问量
+result = logs.groupBy("url").count().orderBy("count", ascending=False)
+
+result.show(10)
+
+-----------------------------------------------------------------------------------------------------------  
+  
+✅ 3. Apache Flink
+Flink 是一款 专为流处理设计 的分布式计算框架，被称为 “流处理界的王者”。
+
+核心作用：
+
+主要用来处理 实时数据流（Kafka、Socket、事件消息等）
+也可以做批处理，但优势在于 低延迟高吞吐的流计算
+API：DataStream API、Table API、Flink SQL
+特点：
+
+事件驱动，毫秒级延迟
+强大的 状态管理 和 窗口计算（比如最近 5 分钟的统计）
+常用于：实时日志监控、欺诈检测、推荐系统
+指导案例：实时点击流分析
+场景：实时接收 Kafka 中的用户点击数据，统计最近 10 秒每个页面的点击量。
+
+JAVA
+StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+// 从 Kafka 消费数据
+FlinkKafkaConsumer<String> consumer = new FlinkKafkaConsumer<>(
+    "click_topic",
+    new SimpleStringSchema(),
+    properties
+);
+
+DataStream<String> stream = env.addSource(consumer);
+
+stream
+    .map(value -> {
+        String[] fields = value.split(",");
+        return new Tuple2<>(fields[0], 1); // (url, 1)
+    })
+    .returns(Types.TUPLE(Types.STRING, Types.INT))
+    .keyBy(t -> t.f0) // 按 url 分组
+    .timeWindow(Time.seconds(10)) // 10 秒滑动窗口
+    .sum(1)
+    .print();
+
+env.execute("Real-time Page Click Count");
+📊 总结对比
+框架	主要场景	特点	示例
+Hive	批量离线分析	SQL 友好，运行在 Hadoop 上	批量处理 Web 日志，天级计算
+Spark	批处理 + 微批流处理	内存计算高性能，机器学习能力强	TB 级日志分析，模型训练
+Flink	实时流处理	毫秒级延迟，复杂事件处理	实时日志监控，推荐/风控系统
+👉 其实三者可以互补：
+
+Hive：数仓、离线数据分析
+Spark：ETL + 大规模计算 + ML
+Flink：实时计算、事件驱动系统
