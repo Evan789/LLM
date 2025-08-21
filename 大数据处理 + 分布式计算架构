@@ -29,7 +29,7 @@ LOCATION '/data/logs/';
 SELECT COUNT(DISTINCT ip), substr(time, 0, 10) as day
 FROM web_logs
 GROUP BY substr(time, 0, 10);
-👉 Hive 会自动帮你把 SQL 转化成 MapReduce 任务去执行。
+Hive 会自动帮你把 SQL 转化成 MapReduce 任务去执行。
 
 ----------------------------------------------------------------------------------------------------------
   
@@ -111,7 +111,8 @@ env.execute("Real-time Page Click Count");
 Hive	批量离线分析	SQL 友好，运行在 Hadoop 上	批量处理 Web 日志，天级计算
 Spark	批处理 + 微批流处理	内存计算高性能，机器学习能力强	TB 级日志分析，模型训练
 Flink	实时流处理	毫秒级延迟，复杂事件处理	实时日志监控，推荐/风控系统
-👉 其实三者可以互补：
+
+其实三者可以互补：
 
 Hive：数仓、离线数据分析
 Spark：ETL + 大规模计算 + ML
