@@ -1,0 +1,121 @@
+Step 1:
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
+from datasets import load_dataset
+
+###
+AutoModelForSequenceClassification：从预训练模型生成一个“文本分类模型”。
+AutoTokenizer：用来把自然语言转成模型能理解的 token 向量。
+Trainer：HuggingFace 封装好的训练器，把训练流程都写好了。
+TrainingArguments：训练需要的各种参数配置（学习率、batch size 等）。
+load_dataset：加载 Hugging Face 提供的公开数据集。
+###
+
+----------------------------------------------------------------------------------------------------------------------
+
+Step 2 加载预训练模型
+model_name = "bert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+
+###
+model_name = "bert-base-uncased"
+说明我们用的是 BERT 预训练模型（小写字母、无大小写区分）。
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+加载和 bert-base-uncased 对应的 分词器，负责把一句话切分成词（token），并映射成模型需要的 id。
+
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+
+加载一个预训练好的 BERT 模型，并在顶部加一个 分类层（全连接层 + softmax）。
+num_labels=2 表示任务是二分类（例如正面/负面情感分类）。
+###
+
+-----------------------------------------------------------------------------------------------------------------------
+
+Step 3 加载数据集
+dataset = load_dataset("glue", "sst2")
+encoded_dataset = dataset.map(lambda x: tokenizer(x["sentence"], truncation=True, padding="max_length"), batched=True)
+encoded_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+
+#####
+dataset = load_dataset("glue", "sst2")
+加载公开数据集 GLUE → SST-2 子任务，这个任务是判断一句话的情感（积极 / 消极）。
+
+encoded_dataset = dataset.map(...)
+用 tokenizer 把句子转成模型能识别的输入格式。
+
+x["sentence"] → 文本内容
+truncation=True → 如果句子太长就截断
+padding="max_length" → 不够长度的句子用 padding 补齐
+encoded_dataset.set_format(...)
+指定数据格式为 PyTorch 张量，并保留 input_ids、attention_mask、label 这三列，
+
+input_ids：每个单词的 token id
+attention_mask：哪些是 padding，哪些是有效 token
+label：分类标签（正/负）
+#####
+
+--------------------------------------------------------------------------------------------
+
+Step 4 定义训练参数
+training_args = TrainingArguments(
+    output_dir="./full_finetune_output",
+    evaluation_strategy="epoch",
+    learning_rate=2e-5,
+    per_device_train_batch_size=16,
+    num_train_epochs=3,
+)
+
+####
+output_dir="./full_finetune_output"
+模型训练结果和日志保存路径。
+
+evaluation_strategy="epoch"
+每训练完一个 epoch 就在验证集上评估一次。
+
+learning_rate=2e-5
+学习率，常见的 BERT 微调经验值就是 2e-5（比从零训练要小很多）。
+
+per_device_train_batch_size=16
+每张显卡的 batch size = 16（一次训练多少句子）。
+
+num_train_epochs=3
+总共训练 3 轮（跑整个数据集 3 次）。
+####
+
+--------------------------------------------------------------------------------------------
+
+Step 5 训练
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=encoded_dataset["train"],
+    eval_dataset=encoded_dataset["validation"],
+)
+trainer.train()
+
+####
+Trainer(...)
+创建一个训练器，自动帮我们做：
+
+正向传播
+计算 loss
+反向传播
+梯度裁剪
+梯度下降更新参数
+评估验证集
+不需要自己写训练循环。
+train_dataset：训练集
+
+eval_dataset：验证集
+
+trainer.train()
+开始模型训练，更新 BERT 的所有参数（全量微调）。
+
+✅ 总结一下：
+这个流程就是 用预训练 BERT + GLUE SST-2 数据集 → 做二分类任务 → 进行全参数微调。
+
+
+
+
+
