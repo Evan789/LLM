@@ -1,0 +1,92 @@
+from peft import LoraConfig, get_peft_model
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+####
+peft：Hugging Face 的参数高效微调工具库，里面实现了 LoRA、Prefix-Tuning、Adapter 等。
+LoraConfig：用来定义 LoRA 的参数配置，比如 r（低秩矩阵大小）、alpha（缩放因子）。
+get_peft_model：用 LoRA 配置“包装”原始模型，把它变成可以训练 LoRA 参数的模型。
+AutoModelForSequenceClassification：从预训练大模型生成一个分类模型。
+AutoTokenizer：分词器。
+####
+-----------------------------------------------------------------------------------------------------------
+
+Step 1 加载预训练模型
+
+model_name = "bert-base-uncased"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+
+#####
+bert-base-uncased：预训练 BERT 模型（小写字母，无区分大小写）。
+AutoTokenizer.from_pretrained：加载对应 tokenizer。
+AutoModelForSequenceClassification.from_pretrained：在 BERT 上加分类任务头（分类层，num_labels=2 表示二分类）。
+#####
+
+------------------------------------------------------------------------------------------------------------
+
+Step 2 定义LoRA配置
+
+lora_config = LoraConfig(
+    task_type="SEQ_CLS",  
+    r=8,                  
+    lora_alpha=16,        
+    lora_dropout=0.05     
+)
+
+#####
+task_type="SEQ_CLS" → 指定任务是 序列分类，告诉 PEFT 框架该怎么注入 LoRA。
+r=8 → LoRA 的秩（rank），决定新增矩阵的维度。比如 q/k/v 的权重矩阵原本是 768×768，现在插入的 LoRA 只需要 768×8 + 8×768 的参数（远小于 768×768）。
+lora_alpha=16 → 缩放因子，类似学习率调节，用于控制 LoRA 的更新强度。
+lora_dropout=0.05 → 在 LoRA 的权重应用 dropout，缓解过拟合问题。
+👉 总之，这一步就是“定义 LoRA 要注入什么样的小参数结构”。
+#####
+
+-----------------------------------------------------------------------------------------------------------
+
+Step 3 包装模型。加上LoRA
+
+lora_model = get_peft_model(model, lora_config)
+
+####
+get_peft_model：根据 lora_config，在 model 的特定层（通常是 q_proj, v_proj 等注意力权重）插入 LoRA 模块。
+替换后的模型：
+原始 BERT 的参数 全部被冻结。
+只新增一小部分 LoRA 参数（低秩 A、B 矩阵）需要训练。
+这样，训练时显存占用大幅下降，更新的参数也从数亿减少到几百万。
+####
+
+-----------------------------------------------------------------------------------------------------------
+
+Step 4 训练
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=encoded_dataset["train"],
+    eval_dataset=encoded_dataset["validation"],
+)
+trainer.train()
+
+----------------------------------------------------------------------------------------
+# 训练完毕之后保存权重、分词器到本地目录
+trainer.save_model("./saved_model")
+tokenizer.save_pretrained("./saved_model")
+
+
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+model = AutoModelForSequenceClassification.from_pretrained("./saved_model")
+tokenizer = AutoTokenizer.from_pretrained("./saved_model")
+
+
+
+
+
+
+
+
+
+
+
+
+
